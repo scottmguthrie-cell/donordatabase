@@ -152,7 +152,7 @@ export default function Dashboard() {
         .filter(r => parseFloat((r.AMOUNT || '0').replace(',', '')) >= 250)
       for (let i = 0; i < rawToSave.length; i += 500) {
         const chunk = rawToSave.slice(i, i + 500).map((r, idx) => ({
-          id: `${(r.LAST_NAME||'').trim()}_${(r.FIRST_NAME||'').trim()}_${(r.ZIP||'').trim().substring(0,5)}_${(r.RPT_YEAR||'').trim()}_${(r.AMOUNT||'').replace(',','').trim()}_${(r.CANDIDATE_LAST_NAME||'').trim()}`,
+          id: `${(r.LAST_NAME||'').trim()}_${(r.FIRST_NAME||'').trim()}_${(r.ZIP||'').trim().substring(0,5)}_${(r.RPT_YEAR||'').trim()}_${(r.AMOUNT||'').replace(',','').trim()}_${(r.CANDIDATE_LAST_NAME||'').trim()}_${(r.FILE_DATE||'').trim().replace(/\//g,'')}_${i+idx}`,
           first_name: (r.FIRST_NAME||'').trim(), last_name: (r.LAST_NAME||'').trim(),
           address: (r.ADDRESS||'').trim(), city: (r.CITY||'').trim(),
           state: (r.STATE||'').trim(), zip: (r.ZIP||'').trim().substring(0,5),
