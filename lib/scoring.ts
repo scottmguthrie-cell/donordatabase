@@ -173,7 +173,8 @@ export function scoreAndGroup(
     // Recency: capped at 8 donations to prevent volume inflation
     const recScore = rows.slice(0, 8).reduce((s, r) => s + (YEAR_WEIGHT[parseInt(r.RPT_YEAR || '2022')] || 0.8), 0)
     const freqBonus = Math.log(Math.min(rows.length, 6) + 1) * 10  // capped at 6 unique cycles
-    const offScore = rows.reduce((s, r) => s + (officeW[(r.OFFICE || '').trim()] || 1.0), 0)
+    // Office score: capped at 8 donations to prevent volume inflation
+    const offScore = rows.slice(0, 8).reduce((s, r) => s + (officeW[(r.OFFICE || '').trim()] || 1.0), 0)
     const raw = sizeScore * weights.size + recScore * weights.recency + freqBonus * weights.freq + offScore * weights.office
 
     const nameCounts: Record<string, number> = {}

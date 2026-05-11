@@ -23,7 +23,7 @@ export default function Dashboard() {
   const [fileNames, setFileNames] = useState<string[]>([])
   const [donors, setDonors] = useState<Donor[]>([])
   const [selectedDonor, setSelectedDonor] = useState<Donor | null>(null)
-  const [weights, setWeights] = useState<ScoreWeights>({ size: 40, recency: 25, freq: 15, office: 20 })
+  const [weights, setWeights] = useState<ScoreWeights>({ size: 70, recency: 10, freq: 10, office: 10 })
   const [geoMode, setGeoMode] = useState<GeoMode>('county')
   const [selectedCounty, setSelectedCounty] = useState<string>('Montgomery')
   const [officeTarget, setOfficeTarget] = useState<string>('HOUSE')
@@ -94,7 +94,7 @@ export default function Dashboard() {
       }))
       setRawRows(mapped)
       setAutoLoaded(true)
-      const w = { size: 40/100, recency: 25/100, freq: 15/100, office: 20/100 }
+      const w = { size: 70/100, recency: 10/100, freq: 10/100, office: 10/100 }
       const defaultGeo: GeoFilter = { mode: 'county', county: 'Montgomery' }
       const result = scoreAndGroup(mapped, w, defaultGeo, 'HOUSE')
       setDonors(result)
