@@ -1,0 +1,6 @@
+{
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "https://grevzwujtthmopxkjyhn.supabase.co",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyZXZ6d3VqdHRobW9weGtqeWhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1MTA4MzIsImV4cCI6MjA5NDA4NjgzMn0.ltXbB-NtdZolDZwZrRzPAqYIjjkVUw8jWKFaNEE4_Vw"
+  }
+}
