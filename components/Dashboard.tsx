@@ -150,9 +150,17 @@ export default function Dashboard() {
       const rawToSave = rawRows
         .filter(r => (r.PARTY || '').trim().toUpperCase() === 'REPUBLICAN' && !(r.NON_INDIVIDUAL || '').trim() && (r.LAST_NAME || '').trim())
         .filter(r => parseFloat((r.AMOUNT || '0').replace(',', '')) >= 250)
-      for (let i = 0; i < rawToSave.length; i += 500) {
-        const chunk = rawToSave.slice(i, i + 500).map((r, idx) => ({
-          id: `${(r.LAST_NAME||'').trim()}_${(r.FIRST_NAME||'').trim()}_${(r.ZIP||'').trim().substring(0,5)}_${(r.RPT_YEAR||'').trim()}_${(r.AMOUNT||'').replace(',','').trim()}_${(r.CANDIDATE_LAST_NAME||'').trim()}_${(r.FILE_DATE||'').trim().replace(/\//g,'')}_${i+idx}`,
+      // Deduplicate by content before saving to avoid upsert conflicts
+      const seen = new Set<string>()
+      const dedupedRaw = rawToSave.filter(r => {
+        const key = `${(r.LAST_NAME||'').trim()}_${(r.FIRST_NAME||'').trim()}_${(r.ZIP||'').trim().substring(0,5)}_${(r.RPT_YEAR||'').trim()}_${(r.AMOUNT||'').replace(',','').trim()}_${(r.CANDIDATE_LAST_NAME||'').trim()}_${(r.FILE_DATE||'').trim()}`
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+      })
+      for (let i = 0; i < dedupedRaw.length; i += 500) {
+        const chunk = dedupedRaw.slice(i, i + 500).map((r, idx) => ({
+          id: `${(r.LAST_NAME||'').trim()}_${(r.FIRST_NAME||'').trim()}_${(r.ZIP||'').trim().substring(0,5)}_${(r.RPT_YEAR||'').trim()}_${(r.AMOUNT||'').replace(',','').trim()}_${(r.CANDIDATE_LAST_NAME||'').trim()}_${(r.FILE_DATE||'').trim().replace(/\//g,'')}`,
           first_name: (r.FIRST_NAME||'').trim(), last_name: (r.LAST_NAME||'').trim(),
           address: (r.ADDRESS||'').trim(), city: (r.CITY||'').trim(),
           state: (r.STATE||'').trim(), zip: (r.ZIP||'').trim().substring(0,5),
@@ -183,7 +191,7 @@ export default function Dashboard() {
         const { error } = await supabase.from('donations').upsert(donationRows.slice(i, i + 500), { onConflict: 'id' })
         if (error) throw error
       }
-      setDbMsg(`✓ Saved ${donors.length} donors and ${rawToSave.length} raw rows`)
+      setDbMsg(`✓ Saved ${donors.length} donors and ${dedupedRaw.length} raw rows`)
     } catch (e: any) { setDbMsg(`Error: ${e.message}`) }
     setDbSaving(false)
   }
