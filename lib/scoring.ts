@@ -167,14 +167,12 @@ export function scoreAndGroup(
     const total = rows.reduce((s, r) => s + parseFloat((r.AMOUNT || '0').replace(',', '') || '0'), 0)
     const totalDonated = rows.reduce((s, r) => s + Math.max(parseFloat((r.AMOUNT || '0').replace(',', '') || '0'), 0), 0)
     const avgGift = totalDonated / rows.length
-    // Size score: avg gift is the primary quality signal (steep power curve)
-    // Total donated is a secondary commitment signal (moderate log curve)
-    // This prevents high-volume low-dollar donors from gaming the score
-    const avgGiftScore = Math.log(1 + Math.pow(Math.max(avgGift, 250) / 250, 2.5))
-    const totalScore = Math.log(1 + totalDonated / 500)
-    const sizeScore = avgGiftScore * 0.65 + totalScore * 0.25
-    const recScore = rows.reduce((s, r) => s + (YEAR_WEIGHT[parseInt(r.RPT_YEAR || '2022')] || 0.8), 0)
-    const freqBonus = Math.log(Math.min(rows.length, 8) + 1) * 10  // capped at 8 to prevent volume gaming
+    // Size score: ONLY avg gift on steep power curve
+    // Total donated intentionally excluded — it rewards volume, not quality
+    const sizeScore = Math.log(1 + Math.pow(Math.max(avgGift, 250) / 250, 2.5))
+    // Recency: capped at 8 donations to prevent volume inflation
+    const recScore = rows.slice(0, 8).reduce((s, r) => s + (YEAR_WEIGHT[parseInt(r.RPT_YEAR || '2022')] || 0.8), 0)
+    const freqBonus = Math.log(Math.min(rows.length, 6) + 1) * 10  // capped at 6 unique cycles
     const offScore = rows.reduce((s, r) => s + (officeW[(r.OFFICE || '').trim()] || 1.0), 0)
     const raw = sizeScore * weights.size + recScore * weights.recency + freqBonus * weights.freq + offScore * weights.office
 
