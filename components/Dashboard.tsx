@@ -66,8 +66,22 @@ export default function Dashboard() {
   const autoLoadAndScore = async () => {
     setInitialLoading(true)
     try {
-      const { data, error } = await supabase.from('raw_donations').select('*')
-      if (error) throw error
+      // Paginate through all rows (Supabase default limit is 1000)
+      let allData: any[] = []
+      let from = 0
+      const batchSize = 1000
+      while (true) {
+        const { data: batch, error: batchErr } = await supabase
+          .from('raw_donations')
+          .select('*')
+          .range(from, from + batchSize - 1)
+        if (batchErr) throw batchErr
+        if (!batch || batch.length === 0) break
+        allData = allData.concat(batch)
+        if (batch.length < batchSize) break
+        from += batchSize
+      }
+      const data = allData
       if (!data?.length) { setInitialLoading(false); return }
       const mapped: RawRow[] = data.map((r: any) => ({
         FIRST_NAME: r.first_name, LAST_NAME: r.last_name, ADDRESS: r.address,
@@ -177,8 +191,22 @@ export default function Dashboard() {
   const adminLoadAndRescore = async () => {
     setLoading(true); setDbMsg('')
     try {
-      const { data, error } = await supabase.from('raw_donations').select('*')
-      if (error) throw error
+      // Paginate through all rows (Supabase default limit is 1000)
+      let allData: any[] = []
+      let from = 0
+      const batchSize = 1000
+      while (true) {
+        const { data: batch, error: batchErr } = await supabase
+          .from('raw_donations')
+          .select('*')
+          .range(from, from + batchSize - 1)
+        if (batchErr) throw batchErr
+        if (!batch || batch.length === 0) break
+        allData = allData.concat(batch)
+        if (batch.length < batchSize) break
+        from += batchSize
+      }
+      const data = allData
       if (!data?.length) { setDbMsg('No raw data in database yet. Upload CSVs first.'); setLoading(false); return }
       const mapped: RawRow[] = data.map((r: any) => ({
         FIRST_NAME: r.first_name, LAST_NAME: r.last_name, ADDRESS: r.address,
