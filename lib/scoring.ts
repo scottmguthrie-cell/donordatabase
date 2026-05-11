@@ -161,7 +161,7 @@ export function scoreAndGroup(
 
   Object.entries(clusters).forEach(([key, rows]) => {
     const total = rows.reduce((s, r) => s + parseFloat((r.AMOUNT || '0').replace(',', '') || '0'), 0)
-    const sizeScore = rows.reduce((s, r) => s + Math.log(Math.max(parseFloat((r.AMOUNT || '0').replace(',', '') || '0'), 250)), 0)
+    const sizeScore = rows.reduce((s, r) => s + Math.log(1 + Math.pow(Math.max(parseFloat((r.AMOUNT || '0').replace(',', '') || '0'), 250) / 250, 2.5)), 0)
     const recScore = rows.reduce((s, r) => s + (YEAR_WEIGHT[parseInt(r.RPT_YEAR || '2022')] || 0.8), 0)
     const freqBonus = Math.log(rows.length + 1) * 10
     const offScore = rows.reduce((s, r) => s + (officeW[(r.OFFICE || '').trim()] || 1.0), 0)
