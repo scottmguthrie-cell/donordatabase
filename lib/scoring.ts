@@ -1,35 +1,53 @@
-export const MONTGOMERY_ZIPS = new Set([
-  '45401','45402','45403','45404','45405','45406','45407','45408','45409','45410',
-  '45411','45412','45413','45414','45415','45416','45417','45418','45419','45420',
-  '45421','45422','45423','45424','45425','45426','45427','45428','45429','45430',
-  '45431','45432','45433','45434','45435','45436','45437','45438','45439','45440',
-  '45441','45449','45450','45458','45459','45469','45470','45475','45479','45481',
-  '45482','45490'
-])
+import { ZIP_TO_COUNTY } from './counties'
 
 export const YEAR_WEIGHT: Record<number, number> = {
   2021: 0.6, 2022: 0.8, 2023: 0.85, 2024: 1.0, 2025: 1.15, 2026: 1.3
 }
 
-export const OFFICE_PROXIMITY: Record<string, Record<string, number>> = {
-  county: {
-    'HOUSE': 1.5, 'COURT OF APPEALS JUDGE': 1.4, 'STATE BOARD OF EDUCATION': 1.3,
-    'SENATE': 1.2, 'GOVERNOR': 1.1, 'SUPREME COURT JUSTICE': 1.0,
-    'SUPREME COURT CHIEF JUSTICE': 1.0, 'ATTORNEY GENERAL': 1.0,
-    'AUDITOR': 1.0, 'TREASURER': 1.0, 'SECRETARY OF STATE': 1.0,
-  },
-  house: {
-    'HOUSE': 1.5, 'SENATE': 1.3, 'STATE BOARD OF EDUCATION': 1.2,
-    'COURT OF APPEALS JUDGE': 1.1, 'GOVERNOR': 1.1, 'SUPREME COURT JUSTICE': 1.0,
-    'SUPREME COURT CHIEF JUSTICE': 1.0, 'ATTORNEY GENERAL': 1.0,
-    'AUDITOR': 1.0, 'TREASURER': 1.0, 'SECRETARY OF STATE': 1.0,
-  },
-  statewide: {
-    'GOVERNOR': 1.5, 'ATTORNEY GENERAL': 1.3, 'SUPREME COURT JUSTICE': 1.3,
-    'SUPREME COURT CHIEF JUSTICE': 1.3, 'AUDITOR': 1.2, 'TREASURER': 1.2,
-    'SECRETARY OF STATE': 1.2, 'SENATE': 1.1, 'HOUSE': 1.0,
-    'COURT OF APPEALS JUDGE': 1.0, 'STATE BOARD OF EDUCATION': 1.0,
-  },
+export const OFFICE_LIST = [
+  'HOUSE',
+  'SENATE',
+  'GOVERNOR',
+  'SUPREME COURT JUSTICE',
+  'SUPREME COURT CHIEF JUSTICE',
+  'COURT OF APPEALS JUDGE',
+  'ATTORNEY GENERAL',
+  'AUDITOR',
+  'TREASURER',
+  'SECRETARY OF STATE',
+  'STATE BOARD OF EDUCATION',
+]
+
+// Build proximity weights: selected office = 1.5, adjacent = 1.2, rest = 1.0
+export function buildOfficeWeights(targetOffice: string): Record<string, number> {
+  const weights: Record<string, number> = {}
+  OFFICE_LIST.forEach(o => { weights[o] = 1.0 })
+  weights[targetOffice] = 1.5
+  // Boost adjacent offices
+  const adjacency: Record<string, string[]> = {
+    'HOUSE': ['SENATE', 'STATE BOARD OF EDUCATION'],
+    'SENATE': ['HOUSE', 'GOVERNOR'],
+    'GOVERNOR': ['SENATE', 'ATTORNEY GENERAL'],
+    'SUPREME COURT JUSTICE': ['SUPREME COURT CHIEF JUSTICE', 'COURT OF APPEALS JUDGE'],
+    'SUPREME COURT CHIEF JUSTICE': ['SUPREME COURT JUSTICE', 'COURT OF APPEALS JUDGE'],
+    'COURT OF APPEALS JUDGE': ['SUPREME COURT JUSTICE', 'HOUSE'],
+    'ATTORNEY GENERAL': ['GOVERNOR', 'AUDITOR'],
+    'AUDITOR': ['ATTORNEY GENERAL', 'TREASURER'],
+    'TREASURER': ['AUDITOR', 'SECRETARY OF STATE'],
+    'SECRETARY OF STATE': ['TREASURER', 'GOVERNOR'],
+    'STATE BOARD OF EDUCATION': ['HOUSE', 'SENATE'],
+  }
+  ;(adjacency[targetOffice] || []).forEach(o => {
+    if (weights[o] < 1.5) weights[o] = 1.2
+  })
+  return weights
+}
+
+export type GeoMode = 'county' | 'statewide' | 'all'
+
+export interface GeoFilter {
+  mode: GeoMode
+  county?: string  // Ohio county name when mode === 'county'
 }
 
 export interface RawRow {
@@ -98,15 +116,24 @@ export interface ScoreWeights {
   office: number
 }
 
-export type GeoFilter = 'montgomery' | 'statewide' | 'all'
-export type OfficeTarget = 'county' | 'house' | 'statewide'
+function passesGeo(zip5: string, state: string, geo: GeoFilter): boolean {
+  if (geo.mode === 'all') return true
+  if (state !== 'OH') return false
+  if (geo.mode === 'statewide') return true
+  if (geo.mode === 'county' && geo.county) {
+    return ZIP_TO_COUNTY[zip5] === geo.county
+  }
+  return false
+}
 
 export function scoreAndGroup(
   rows: RawRow[],
   weights: ScoreWeights,
   geo: GeoFilter,
-  officeTarget: OfficeTarget
+  officeTarget: string
 ): Donor[] {
+  const officeW = buildOfficeWeights(officeTarget)
+
   const filtered = rows.filter(r => {
     if ((r.PARTY || '').trim().toUpperCase() !== 'REPUBLICAN') return false
     if ((r.NON_INDIVIDUAL || '').trim()) return false
@@ -115,8 +142,7 @@ export function scoreAndGroup(
     if (isNaN(amt) || amt < 250) return false
     const zip5 = (r.ZIP || '').trim().substring(0, 5)
     const state = (r.STATE || '').trim().toUpperCase()
-    if (geo === 'montgomery' && !MONTGOMERY_ZIPS.has(zip5)) return false
-    if (geo === 'statewide' && state !== 'OH') return false
+    if (!passesGeo(zip5, state, geo)) return false
     return true
   })
 
@@ -131,7 +157,6 @@ export function scoreAndGroup(
     clusters[key].push(r)
   })
 
-  const officeW = OFFICE_PROXIMITY[officeTarget] || OFFICE_PROXIMITY.county
   const results: (Donor & { _raw?: number })[] = []
 
   Object.entries(clusters).forEach(([key, rows]) => {
@@ -151,7 +176,6 @@ export function scoreAndGroup(
     const parts = bestName.split(' ')
     const first = parts[0] || ''
     const last = parts.slice(1).join(' ') || ''
-
     const sorted = [...rows].sort((a, b) => parseInt(b.RPT_YEAR || '0') - parseInt(a.RPT_YEAR || '0'))
     const candidates = [...new Set(rows.map(r =>
       `${(r.CANDIDATE_FIRST_NAME || '').trim()} ${(r.CANDIDATE_LAST_NAME || '').trim()}`.trim()
@@ -191,18 +215,17 @@ export function scoreAndGroup(
       donor_score: 0,
       tier: '',
       donations,
+      _raw: raw,
     })
-
-    results[results.length - 1]['_raw'] = raw as any
   })
 
-  const scores = results.map(r => (r as any)['_raw'] as number)
+  const scores = results.map(r => r._raw as number)
   const minS = Math.min(...scores)
   const maxS = Math.max(...scores)
 
   results.forEach(r => {
-    const raw = (r as any)['_raw'] as number
-    delete (r as any)['_raw']
+    const raw = r._raw as number
+    delete r._raw
     r.donor_score = maxS === minS ? 50 : Math.round(1 + 99 * (raw - minS) / (maxS - minS))
     if (r.donor_score >= 40) r.tier = 'A'
     else if (r.donor_score >= 20) r.tier = 'B'
