@@ -135,6 +135,10 @@ export function scoreAndGroup(
   const officeW = buildOfficeWeights(officeTarget)
 
   const filtered = rows.filter(r => {
+    // Filter self-donations (candidate funding own campaign)
+    const donorLast = (r.LAST_NAME || '').trim().toUpperCase()
+    const candLast = (r.CANDIDATE_LAST_NAME || '').trim().toUpperCase()
+    if (donorLast && candLast && donorLast === candLast) return false
     if ((r.PARTY || '').trim().toUpperCase() !== 'REPUBLICAN') return false
     if ((r.NON_INDIVIDUAL || '').trim()) return false
     if (!(r.LAST_NAME || '').trim()) return false
@@ -165,7 +169,7 @@ export function scoreAndGroup(
     const avgGift = totalDonated / rows.length
     // Size: power curve on total donated × avg gift quality multiplier
     // This penalizes high-volume low-dollar donors vs genuine major donors
-    const sizeScore = Math.log(1 + Math.pow(totalDonated / 250, 2.0)) * Math.log(1 + avgGift / 500)
+    const sizeScore = Math.log(1 + Math.pow(totalDonated / 250, 2.0)) * Math.pow(Math.log(1 + avgGift / 500), 1.5)
     const recScore = rows.reduce((s, r) => s + (YEAR_WEIGHT[parseInt(r.RPT_YEAR || '2022')] || 0.8), 0)
     const freqBonus = Math.log(Math.min(rows.length, 12) + 1) * 10  // cap at 12 to prevent volume gaming
     const offScore = rows.reduce((s, r) => s + (officeW[(r.OFFICE || '').trim()] || 1.0), 0)
