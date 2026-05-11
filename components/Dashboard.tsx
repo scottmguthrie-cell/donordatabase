@@ -1,5 +1,5 @@
 'use client'
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import Papa from 'papaparse'
 import { supabase } from '@/lib/supabase'
 import { scoreAndGroup, Donor, RawRow, ScoreWeights, GeoFilter, GeoMode, OFFICE_LIST } from '@/lib/scoring'
@@ -18,6 +18,7 @@ const TIER_COLORS: Record<string, string> = {
 const PAGE_SIZE = 25
 
 export default function Dashboard() {
+  const [isAdmin, setIsAdmin] = useState(false)
   const [rawRows, setRawRows] = useState<RawRow[]>([])
   const [fileNames, setFileNames] = useState<string[]>([])
   const [donors, setDonors] = useState<Donor[]>([])
@@ -34,9 +35,11 @@ export default function Dashboard() {
   const [sortDir, setSortDir] = useState<1 | -1>(-1)
   const [page, setPage] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [dbSaving, setDbSaving] = useState(false)
   const [dbMsg, setDbMsg] = useState('')
   const [dragging, setDragging] = useState(false)
+  const [autoLoaded, setAutoLoaded] = useState(false)
 
   const weightSum = weights.size + weights.recency + weights.freq + weights.office
 
@@ -47,6 +50,45 @@ export default function Dashboard() {
   const filteredCounties = COUNTY_NAMES.filter(c =>
     c.toLowerCase().includes(countySearch.toLowerCase())
   )
+
+  // Detect admin mode and auto-load on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const admin = params.get('admin') === 'true'
+    setIsAdmin(admin)
+    if (!admin) {
+      autoLoadAndScore()
+    } else {
+      setInitialLoading(false)
+    }
+  }, [])
+
+  const autoLoadAndScore = async () => {
+    setInitialLoading(true)
+    try {
+      const { data, error } = await supabase.from('raw_donations').select('*')
+      if (error) throw error
+      if (!data?.length) { setInitialLoading(false); return }
+      const mapped: RawRow[] = data.map((r: any) => ({
+        FIRST_NAME: r.first_name, LAST_NAME: r.last_name, ADDRESS: r.address,
+        CITY: r.city, STATE: r.state, ZIP: r.zip,
+        AMOUNT: String(r.amount), RPT_YEAR: String(r.rpt_year),
+        FILE_DATE: r.file_date, OFFICE: r.office, PARTY: r.party,
+        CANDIDATE_FIRST_NAME: r.candidate_first, CANDIDATE_LAST_NAME: r.candidate_last,
+        EMP_OCCUPATION: r.emp_occupation, COM_NAME: r.com_name,
+        NON_INDIVIDUAL: r.non_individual,
+      }))
+      setRawRows(mapped)
+      setAutoLoaded(true)
+      const w = { size: 40/100, recency: 25/100, freq: 15/100, office: 20/100 }
+      const defaultGeo: GeoFilter = { mode: 'county', county: 'Montgomery' }
+      const result = scoreAndGroup(mapped, w, defaultGeo, 'HOUSE')
+      setDonors(result)
+    } catch (e) {
+      // silently fail — user will see empty state
+    }
+    setInitialLoading(false)
+  }
 
   const handleFiles = useCallback((files: FileList | null) => {
     if (!files) return
@@ -91,7 +133,6 @@ export default function Dashboard() {
       const { error: dErr } = await supabase.from('donors').upsert(donorRows, { onConflict: 'id' })
       if (dErr) throw dErr
 
-      // Save raw rows (pre-filtered) for user rescoring
       const rawToSave = rawRows
         .filter(r => (r.PARTY || '').trim().toUpperCase() === 'REPUBLICAN' && !(r.NON_INDIVIDUAL || '').trim() && (r.LAST_NAME || '').trim())
         .filter(r => parseFloat((r.AMOUNT || '0').replace(',', '')) >= 250)
@@ -133,13 +174,12 @@ export default function Dashboard() {
     setDbSaving(false)
   }
 
-  const loadAndRescore = async () => {
+  const adminLoadAndRescore = async () => {
     setLoading(true); setDbMsg('')
     try {
       const { data, error } = await supabase.from('raw_donations').select('*')
       if (error) throw error
       if (!data?.length) { setDbMsg('No raw data in database yet. Upload CSVs first.'); setLoading(false); return }
-      // Map back to RawRow format
       const mapped: RawRow[] = data.map((r: any) => ({
         FIRST_NAME: r.first_name, LAST_NAME: r.last_name, ADDRESS: r.address,
         CITY: r.city, STATE: r.state, ZIP: r.zip,
@@ -202,6 +242,15 @@ export default function Dashboard() {
     sortCol !== col ? <ChevronUp size={12} className="text-gray-300" /> :
     sortDir === -1 ? <ChevronDown size={12} className="text-gray-600" /> : <ChevronUp size={12} className="text-gray-600" />
 
+  if (initialLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen gap-3">
+        <RefreshCw size={24} className="animate-spin text-blue-500" />
+        <p className="text-sm text-gray-500">Loading donor data…</p>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
       {selectedDonor && <DonorPanel donor={selectedDonor} onClose={() => setSelectedDonor(null)} />}
@@ -211,52 +260,56 @@ export default function Dashboard() {
           <h1 className="text-2xl font-semibold text-gray-900">GOP Donor Dashboard</h1>
           <p className="text-sm text-gray-500 mt-0.5">Ohio Republican donor prospecting · 2021–2026</p>
         </div>
-        <div className="flex gap-2">
-          <button onClick={loadAndRescore} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
-            <Database size={14} /> Load &amp; rescore from DB
-          </button>
-          <button onClick={saveToSupabase} disabled={!donors.length || dbSaving} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40">
-            <Database size={14} /> {dbSaving ? 'Saving…' : 'Save to DB'}
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex gap-2">
+            <button onClick={adminLoadAndRescore} className="flex items-center gap-1.5 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
+              <Database size={14} /> Load from DB
+            </button>
+            <button onClick={saveToSupabase} disabled={!donors.length || dbSaving} className="flex items-center gap-1.5 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40">
+              <Database size={14} /> {dbSaving ? 'Saving…' : 'Save to DB'}
+            </button>
+          </div>
+        )}
       </div>
 
-      {dbMsg && (
+      {isAdmin && dbMsg && (
         <div className={`mb-4 px-4 py-2.5 rounded-lg text-sm ${dbMsg.startsWith('✓') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
           {dbMsg}
         </div>
       )}
 
-      {/* Upload */}
-      <div
-        className={`border-2 border-dashed rounded-xl p-8 text-center mb-4 cursor-pointer transition-colors ${dragging ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
-        onDragOver={e => { e.preventDefault(); setDragging(true) }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files) }}
-        onClick={() => document.getElementById('fileInput')?.click()}
-      >
-        <Upload className="mx-auto mb-2 text-gray-400" size={24} />
-        <p className="text-sm font-medium text-gray-700">Drop CSV files here or click to browse</p>
-        <p className="text-xs text-gray-400 mt-1">Ohio SOS CAC_CON_YYYY.CSV · Admin only — users click "Load &amp; rescore from DB"</p>
-        <input id="fileInput" type="file" multiple accept=".csv,.CSV" className="hidden" onChange={e => handleFiles(e.target.files)} />
-      </div>
-
-      {fileNames.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          {fileNames.map(n => (
-            <span key={n} className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full px-3 py-1">
-              {n}
-              {n !== '(loaded from database)' && (
-                <button onClick={() => setFileNames(prev => prev.filter(x => x !== n))} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>
-              )}
-            </span>
-          ))}
-        </div>
+      {/* Admin-only upload */}
+      {isAdmin && (
+        <>
+          <div
+            className={`border-2 border-dashed rounded-xl p-8 text-center mb-4 cursor-pointer transition-colors ${dragging ? 'border-blue-400 bg-blue-50' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+            onDragOver={e => { e.preventDefault(); setDragging(true) }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files) }}
+            onClick={() => document.getElementById('fileInput')?.click()}
+          >
+            <Upload className="mx-auto mb-2 text-gray-400" size={24} />
+            <p className="text-sm font-medium text-gray-700">Drop CSV files here or click to browse</p>
+            <p className="text-xs text-gray-400 mt-1">Ohio SOS CAC_CON_YYYY.CSV</p>
+            <input id="fileInput" type="file" multiple accept=".csv,.CSV" className="hidden" onChange={e => handleFiles(e.target.files)} />
+          </div>
+          {fileNames.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {fileNames.map(n => (
+                <span key={n} className="flex items-center gap-1.5 text-xs bg-white border border-gray-200 rounded-full px-3 py-1">
+                  {n}
+                  {n !== '(loaded from database)' && (
+                    <button onClick={() => setFileNames(prev => prev.filter(x => x !== n))} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Controls */}
       <div className="bg-white border border-gray-100 rounded-xl p-5 mb-5">
-        {/* Weights */}
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Scoring weights</p>
         <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-4">
           {([['size','Donation size'],['recency','Recency'],['freq','Frequency'],['office','Office proximity']] as [keyof ScoreWeights, string][]).map(([key, label]) => (
@@ -278,7 +331,6 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-2 gap-6 mb-5">
-          {/* Geography */}
           <div>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Geography</p>
             <div className="flex gap-2 mb-3">
@@ -304,7 +356,7 @@ export default function Dashboard() {
                   <div className="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
                     {filteredCounties.map(c => (
                       <button key={c} onMouseDown={() => { setSelectedCounty(c); setCountySearch(''); setShowCountyDropdown(false) }}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 ${selectedCounty === c ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 ${selectedCounty===c ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
                         {c} County
                       </button>
                     ))}
@@ -315,16 +367,15 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Office target */}
           <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Office target (weights proximity)</p>
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Office target</p>
             <select value={officeTarget} onChange={e => setOfficeTarget(e.target.value)}
               className="w-full text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-blue-400 bg-white text-gray-700">
               {OFFICE_LIST.map(o => (
                 <option key={o} value={o}>{o.charAt(0) + o.slice(1).toLowerCase()}</option>
               ))}
             </select>
-            <p className="text-xs text-gray-400 mt-1.5">Donors who gave to this office type score higher. All donors remain in the pool.</p>
+            <p className="text-xs text-gray-400 mt-1.5">Donors who gave to this office type score higher.</p>
           </div>
         </div>
 
@@ -383,7 +434,7 @@ export default function Dashboard() {
             <tbody>
               {pageSlice.length === 0 ? (
                 <tr><td colSpan={9} className="text-center py-16 text-gray-400 text-sm">
-                  {donors.length ? 'No donors match filters' : 'Click "Load & rescore from DB" or upload CSVs'}
+                  {initialLoading ? 'Loading…' : donors.length ? 'No donors match filters' : 'No data available'}
                 </td></tr>
               ) : pageSlice.map(d => (
                 <tr key={d.id} onClick={() => setSelectedDonor(d)}
