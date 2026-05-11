@@ -288,10 +288,10 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6">
+    <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
       {selectedDonor && <DonorPanel donor={selectedDonor} onClose={() => setSelectedDonor(null)} />}
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-semibold text-gray-900">GOP Donor Dashboard</h1>
           <p className="text-sm text-gray-500 mt-0.5">Ohio Republican donor prospecting · 2021–2026</p>
@@ -347,7 +347,7 @@ export default function Dashboard() {
       {/* Controls */}
       <div className="bg-white border border-gray-100 rounded-xl p-5 mb-5">
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Scoring weights</p>
-        <div className="grid grid-cols-2 gap-x-8 gap-y-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 mb-4">
           {([['size','Donation size'],['recency','Recency'],['freq','Frequency'],['office','Office proximity']] as [keyof ScoreWeights, string][]).map(([key, label]) => (
             <div key={key}>
               <div className="flex justify-between mb-1">
@@ -366,10 +366,10 @@ export default function Dashboard() {
           {weightSum !== 100 && <span className="text-red-500 text-xs">must equal 100%</span>}
         </div>
 
-        <div className="grid grid-cols-2 gap-6 mb-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-5">
           <div>
             <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Geography</p>
-            <div className="flex gap-2 mb-3">
+            <div className="flex flex-wrap gap-2 mb-3">
               {([['county','By county'],['statewide','Statewide OH'],['all','All states']] as [GeoMode,string][]).map(([v,l]) => (
                 <button key={v} onClick={() => setGeoMode(v)}
                   className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${geoMode===v ? 'bg-blue-50 border-blue-300 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
@@ -424,7 +424,7 @@ export default function Dashboard() {
 
       {/* Metrics */}
       {donors.length > 0 && (
-        <div className="grid grid-cols-5 gap-3 mb-5">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
           {[['Total donors', donors.length.toLocaleString()],['Total donated','$'+Math.round(totalGiven).toLocaleString()],
             ['Avg gift', donors.length ? '$'+Math.round(totalGiven/donors.length).toLocaleString() : '—'],
             ['Tier A donors', tierA.toString()],['Rows loaded', rawRows.length.toLocaleString()]
@@ -439,16 +439,16 @@ export default function Dashboard() {
 
       {/* Table */}
       <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
-        <div className="flex items-center gap-3 px-5 py-3 border-b border-gray-100">
+        <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-gray-100">
           <input type="text" placeholder="Search name, city, ZIP…" value={search}
             onChange={e => { setSearch(e.target.value); setPage(0) }}
-            className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg w-52 focus:outline-none focus:border-blue-400" />
+            className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg w-full sm:w-52 focus:outline-none focus:border-blue-400" />
           <select value={tierFilter} onChange={e => { setTierFilter(e.target.value); setPage(0) }}
             className="text-sm px-3 py-1.5 border border-gray-200 rounded-lg focus:outline-none bg-white">
             <option value="">All tiers</option>
             {['A','B','C','D','E'].map(t => <option key={t} value={t}>Tier {t}</option>)}
           </select>
-          <div className="ml-auto">
+          <div className="sm:ml-auto">
             <button onClick={exportCsv} disabled={!visible.length}
               className="flex items-center gap-1.5 text-sm px-3 py-1.5 border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-40">
               <Download size={14} /> Export CSV
